@@ -3,7 +3,7 @@ local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 local Window = Rayfield:CreateWindow({
    Name = "Tập Béo Phì",
    LoadingTitle = "Đang tải script...",
-   LoadingSubtitle = "AI HACK",
+   LoadingSubtitle = "Tập Béo Phì Hub",
    ConfigurationSaving = {
       Enabled = true,
       FolderName = "TapBeoPhiHub",
@@ -30,12 +30,13 @@ local PlayerTryClickRE = EatEvent:WaitForChild("PlayerTryClickRE")
 local autoTrainEnabled = false
 local autoClaimOfflineEnabled = false
 local autoRebirthEnabled = false
+local autoSpinEnabled = false
 local speedEnabled = false
 local jumpEnabled = false
 local speedValue = 16
 local jumpValue = 50
 
--- Hàm hiển thị thông báo tiện lợi
+-- Hàm hiển thị thông báo
 local function notify(title, content)
    Rayfield:Notify({
       Title = title,
@@ -129,6 +130,34 @@ FarmTab:CreateButton({
    end,
 })
 
+FarmTab:CreateButton({
+   Name = "Quay vòng quay",
+   Callback = function()
+      Function:WaitForChild("Spin"):WaitForChild("[C-S]TrySpin"):InvokeServer()
+      notify("Vòng quay", "Đã thực hiện quay vòng quay!")
+   end,
+})
+
+FarmTab:CreateToggle({
+   Name = "Tự động quay vòng quay",
+   CurrentValue = false,
+   Flag = "AutoSpinToggle",
+   Callback = function(Value)
+      autoSpinEnabled = Value
+      if autoSpinEnabled then
+         notify("Vòng quay", "Trạng thái: BẬT Auto quay (1/10 giây)")
+         task.spawn(function()
+            while autoSpinEnabled do
+               Function:WaitForChild("Spin"):WaitForChild("[C-S]TrySpin"):InvokeServer()
+               task.wait(1 / 10)
+            end
+         end)
+      else
+         notify("Vòng quay", "Trạng thái: TẮT Auto quay")
+      end
+   end,
+})
+
 ---------------------------------------------------------
 -- TAB PET
 ---------------------------------------------------------
@@ -148,6 +177,29 @@ PetTab:CreateButton({
       local args = { "Egg1", 1 }
       Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
       notify("Pet", "Đã thực hiện mở Trứng 1!")
+   end,
+})
+
+PetTab:CreateButton({
+   Name = "Random pet 2",
+   Callback = function()
+      local args = { "Egg2", 1 }
+      Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
+      notify("Pet", "Đã thực hiện mở Trứng 2!")
+   end,
+})
+
+---------------------------------------------------------
+-- TAB MUA ĐỒ
+---------------------------------------------------------
+local ShopTab = Window:CreateTab("Mua đồ", 4483362458)
+
+ShopTab:CreateButton({
+   Name = "Mua đường mòn nước",
+   Callback = function()
+      local args = { "Blister" }
+      Event:WaitForChild("Trail"):WaitForChild("TryUnlockTrail"):FireServer(unpack(args))
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Đường mòn nước!")
    end,
 })
 
@@ -230,21 +282,5 @@ PlayerTab:CreateToggle({
    end,
 })
 
-PlayerTab:CreateButton({
-   Name = "Ragdoll (Nằm)",
-   Callback = function()
-      Event:WaitForChild("Race"):WaitForChild("Ragdoll"):FireServer()
-      notify("Trạng thái", "Đã bật trạng thái Ragdoll (Nằm)")
-   end,
-})
-
-PlayerTab:CreateButton({
-   Name = "Tắt Ragdoll (Đứng dậy)",
-   Callback = function()
-      Event:WaitForChild("Race"):WaitForChild("UnRagdoll"):FireServer()
-      notify("Trạng thái", "Đã tắt trạng thái Ragdoll (Đứng dậy)")
-   end,
-})
-
--- Tự động tải lại cài đặt đã lưu
+-- Tự động khôi phục cấu hình đã lưu
 Rayfield:LoadConfiguration()
