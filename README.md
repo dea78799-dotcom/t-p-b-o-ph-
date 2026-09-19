@@ -16,6 +16,7 @@ local Window = Rayfield:CreateWindow({
 -- Services & Remote References
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remote = ReplicatedStorage:WaitForChild("Remote")
@@ -25,12 +26,15 @@ local Function = Remote:WaitForChild("Function")
 local EatEvent = Event:WaitForChild("Eat")
 local PlayerIsEat = EatEvent:WaitForChild("PlayerIsEat")
 local PlayerTryClickRE = EatEvent:WaitForChild("PlayerTryClickRE")
+local PlayerEndRace = Event:WaitForChild("Race"):WaitForChild("PlayerEndRace")
 
 -- Variables
 local autoTrainEnabled = false
 local autoClaimOfflineEnabled = false
 local autoRebirthEnabled = false
 local autoSpinEnabled = false
+local autoCoinEnabled = false
+
 local speedEnabled = false
 local jumpEnabled = false
 local speedValue = 16
@@ -78,6 +82,79 @@ FarmTab:CreateToggle({
          end)
       else
          notify("Tự động tập", "Trạng thái: TẮT")
+      end
+   end,
+})
+
+FarmTab:CreateToggle({
+   Name = "Auto cày xu",
+   CurrentValue = false,
+   Flag = "AutoCoinToggle",
+   Callback = function(Value)
+      autoCoinEnabled = Value
+      if autoCoinEnabled then
+         notify("Auto Cày Xu", "Trạng thái: BẬT")
+         
+         task.spawn(function()
+            local targetCFrame = CFrame.new(0.73, 5004.52, -84.40)
+            
+            while autoCoinEnabled do
+               local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+               local hrp = character:WaitForChild("HumanoidRootPart", 5)
+               
+               if hrp then
+                  -- Tính thời gian bay dựa trên khoảng cách (Tốc độ bay mượt)
+                  local distance = (hrp.Position - targetCFrame.Position).Magnitude
+                  local tweenInfo = TweenInfo.new(distance / 100, Enum.EasingStyle.Linear)
+                  local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+                  
+                  tween:Play()
+                  
+                  -- Chờ đến khi bay xong hoặc dừng nếu tắt toggle
+                  local completed = false
+                  local conn
+                  conn = tween.Completed:Connect(function()
+                     completed = true
+                     if conn then conn:Disconnect() end
+                  end)
+                  
+                  while not completed and autoCoinEnabled do
+                     task.wait(0.1)
+                  end
+                  
+                  if not autoCoinEnabled then
+                     tween:Cancel()
+                     break
+                  end
+                  
+                  -- Chờ sự kiện PlayerEndRace kích hoạt từ server
+                  local raceEnded = false
+                  local eventConn
+                  eventConn = PlayerEndRace.OnClientEvent:Connect(function()
+                     raceEnded = true
+                     if eventConn then eventConn:Disconnect() end
+                  end)
+                  
+                  -- Đợi tối đa hoặc chờ tín hiệu từ server
+                  local timeout = 0
+                  while not raceEnded and autoCoinEnabled and timeout < 30 do
+                     task.wait(0.5)
+                     timeout = timeout + 0.5
+                  end
+                  
+                  if eventConn then eventConn:Disconnect() end
+                  
+                  -- Chờ 5 giây trước khi lặp lại vòng mới
+                  if autoCoinEnabled then
+                     task.wait(5)
+                  end
+               else
+                  task.wait(1)
+               end
+            end
+         end)
+      else
+         notify("Auto Cày Xu", "Trạng thái: TẮT")
       end
    end,
 })
@@ -200,6 +277,24 @@ ShopTab:CreateButton({
       local args = { "Blister" }
       Event:WaitForChild("Trail"):WaitForChild("TryUnlockTrail"):FireServer(unpack(args))
       notify("Cửa hàng", "Đã gửi yêu cầu mua Đường mòn nước!")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Mua đường mòn sấm sét",
+   Callback = function()
+      local args = { "Lightning" }
+      Event:WaitForChild("Trail"):WaitForChild("TryUnlockTrail"):FireServer(unpack(args))
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Đường mòn sấm sét!")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Mua đường mòn nhạc",
+   Callback = function()
+      local args = { "Music" }
+      Event:WaitForChild("Trail"):WaitForChild("TryUnlockTrail"):FireServer(unpack(args))
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Đường mòn nhạc!")
    end,
 })
 
