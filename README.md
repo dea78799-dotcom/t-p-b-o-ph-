@@ -1,13 +1,31 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
+-- ID Game
+local WORLD_1_ID = 75568173037446
+local WORLD_2_ID = 79162127792867
+
+local currentPlaceId = game.PlaceId
+
+-- Kiểm tra ID Game hợp lệ
+if currentPlaceId ~= WORLD_1_ID and currentPlaceId ~= WORLD_2_ID then
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "Lỗi Game ID!",
+        Text = "Script không hỗ trợ Game ID hiện tại: " .. tostring(currentPlaceId),
+        Duration = 5
+    })
+    return
+end
+
+local isWorld1 = (currentPlaceId == WORLD_1_ID)
+
 local Window = Rayfield:CreateWindow({
-   Name = "Tập Béo Phì",
+   Name = "Tập Béo Phì " .. (isWorld1 and "(World 1 - Full)" or "(World 2 - Lite)"),
    LoadingTitle = "Đang tải script...",
    LoadingSubtitle = "Tập Béo Phì Hub",
    ConfigurationSaving = {
       Enabled = true,
-      FolderName = "TapBeoPhiHub",
-      FileName = "Settings"
+      FolderName = "🤖AI HACK🤖",
+      FileName = "Settings_" .. tostring(currentPlaceId)
    },
    Discord = { Enabled = false },
    KeySystem = false
@@ -17,6 +35,8 @@ local Window = Rayfield:CreateWindow({
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 
 local Remote = ReplicatedStorage:WaitForChild("Remote")
 local Event = Remote:WaitForChild("Event")
@@ -25,8 +45,11 @@ local Function = Remote:WaitForChild("Function")
 local EatEvent = Event:WaitForChild("Eat")
 local PlayerIsEat = EatEvent:WaitForChild("PlayerIsEat")
 local PlayerTryClickRE = EatEvent:WaitForChild("PlayerTryClickRE")
-local PlayerEndRace = Event:WaitForChild("Race"):WaitForChild("PlayerEndRace")
 local TryUnlockFood = Event:WaitForChild("Food"):WaitForChild("TryUnlockFood")
+local TryTeleportWorld = Event:WaitForChild("World"):WaitForChild("TryTeleportWorld")
+
+-- Remote nhận diện hoàn thành đua cho cả 2 World
+local PlayerEndRace = Event:WaitForChild("Race"):WaitForChild("PlayerEndRace")
 
 -- Variables
 local autoTrainEnabled = false
@@ -34,6 +57,7 @@ local autoClaimOfflineEnabled = false
 local autoRebirthEnabled = false
 local autoSpinEnabled = false
 local autoCoinEnabled = false
+local autoFarmMoneyW2Enabled = false
 local autoBuyFoodEnabled = false
 
 local speedEnabled = false
@@ -132,7 +156,6 @@ local function GetMoneyUniversal()
     return nil
 end
 
--- Hàm chuyển đổi định dạng chuỗi Money (ví dụ: "3.2M", "500k", "$1,000") về dạng Số (number)
 local function ParseMoney(val)
     if type(val) == "number" then return val end
     if type(val) ~= "string" then return 0 end
@@ -152,10 +175,52 @@ local function ParseMoney(val)
     return num
 end
 
+-- Server Hop
+local function JoinLowServer()
+   notify("Server Hop", "Đang tìm server dưới 3 người...")
+   local placeId = game.PlaceId
+   local cursor = ""
+   local foundServer = nil
+
+   repeat
+      local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100" .. (cursor ~= "" and "&cursor=" .. cursor or "")
+      local success, result = pcall(function()
+         return HttpService:JSONDecode(game:HttpGet(url))
+      end)
+
+      if success and result and result.data then
+         cursor = result.cursor or ""
+         for _, server in ipairs(result.data) do
+            if server.playing < 3 and server.id ~= game.JobId then
+               foundServer = server.id
+               break
+            end
+         end
+      else
+         break
+      end
+      task.wait(0.2)
+   until foundServer or cursor == ""
+
+   if foundServer then
+      notify("Server Hop", "Đã tìm thấy! Đang chuyển server...")
+      TeleportService:TeleportToPlaceInstance(placeId, foundServer, LocalPlayer)
+   else
+      notify("Server Hop", "Không tìm thấy server phù hợp, thử lại sau.")
+   end
+end
+
 ---------------------------------------------------------
 -- TAB FARM
 ---------------------------------------------------------
 local FarmTab = Window:CreateTab("Farm", 4483362458)
+
+FarmTab:CreateButton({
+   Name = "Vào server ít người (<3 người)",
+   Callback = function()
+      JoinLowServer()
+   end,
+})
 
 FarmTab:CreateButton({
    Name = "Trang bị thức ăn",
@@ -188,54 +253,112 @@ FarmTab:CreateToggle({
    end,
 })
 
-FarmTab:CreateToggle({
-   Name = "Auto cày xu",
-   CurrentValue = false,
-   Flag = "AutoCoinToggle",
-   Callback = function(Value)
-      autoCoinEnabled = Value
-      if autoCoinEnabled then
-         notify("Auto Cày Xu", "Trạng thái: BẬT (Dịch chuyển)")
-         
-         task.spawn(function()
-            local targetCFrame = CFrame.new(0.73, 5004.52, -84.40)
+-- AUTO CÀY XU WORLD 1 (75568173037446)
+if isWorld1 then
+   FarmTab:CreateToggle({
+      Name = "Auto cày xu",
+      CurrentValue = false,
+      Flag = "AutoCoinToggle",
+      Callback = function(Value)
+         autoCoinEnabled = Value
+         if autoCoinEnabled then
+            notify("Auto Cày Xu", "Trạng thái: BẬT (Dịch chuyển W1)")
             
-            while autoCoinEnabled do
-               local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-               local hrp = character:WaitForChild("HumanoidRootPart", 5)
+            task.spawn(function()
+               local targetCFrame = CFrame.new(0.73, 5004.52, -84.40)
                
-               if hrp then
-                  hrp.CFrame = targetCFrame
+               while autoCoinEnabled do
+                  local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+                  local hrp = character:WaitForChild("HumanoidRootPart", 5)
                   
-                  local raceEnded = false
-                  local eventConn
-                  
-                  eventConn = PlayerEndRace.OnClientEvent:Connect(function()
-                     raceEnded = true
+                  if hrp then
+                     hrp.CFrame = targetCFrame
+                     
+                     local raceEnded = false
+                     local eventConn
+                     
+                     eventConn = PlayerEndRace.OnClientEvent:Connect(function()
+                        raceEnded = true
+                        if eventConn then eventConn:Disconnect() end
+                     end)
+                     
+                     local timeout = 0
+                     while not raceEnded and autoCoinEnabled and timeout < 30 do
+                        task.wait(0.5)
+                        timeout = timeout + 0.5
+                     end
+                     
                      if eventConn then eventConn:Disconnect() end
-                  end)
-                  
-                  local timeout = 0
-                  while not raceEnded and autoCoinEnabled and timeout < 30 do
-                     task.wait(0.5)
-                     timeout = timeout + 0.5
+                     
+                     if autoCoinEnabled then
+                        notify("Auto Cày Xu", "Đã hoàn thành! Đang chờ 10s lặp lại...")
+                        task.wait(10)
+                     end
+                  else
+                     task.wait(1)
                   end
-                  
-                  if eventConn then eventConn:Disconnect() end
-                  
-                  if autoCoinEnabled then
-                     task.wait(10)
-                  end
-               else
-                  task.wait(1)
                end
-            end
-         end)
-      else
-         notify("Auto Cày Xu", "Trạng thái: TẮT")
-      end
-   end,
-})
+            end)
+         else
+            notify("Auto Cày Xu", "Trạng thái: TẮT")
+         end
+      end,
+   })
+else
+   -- AUTO FARM MONEY WORLD 2 (79162127792867)
+   FarmTab:CreateToggle({
+      Name = "Auto farm money",
+      CurrentValue = false,
+      Flag = "AutoFarmMoneyW2Toggle",
+      Callback = function(Value)
+         autoFarmMoneyW2Enabled = Value
+         if autoFarmMoneyW2Enabled then
+            notify("Auto Farm Money", "Trạng thái: BẬT (Dịch chuyển W2)")
+            
+            task.spawn(function()
+               local targetCFrame = CFrame.new(-4999.87, 8356.70, -179.45)
+               local loopCount = 0
+               
+               while autoFarmMoneyW2Enabled do
+                  local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+                  local hrp = character:WaitForChild("HumanoidRootPart", 5)
+                  
+                  if hrp then
+                     -- Dịch chuyển tức thì đến tọa độ W2
+                     hrp.CFrame = targetCFrame
+                     
+                     local raceEnded = false
+                     local eventConn
+                     
+                     eventConn = PlayerEndRace.OnClientEvent:Connect(function()
+                        raceEnded = true
+                        if eventConn then eventConn:Disconnect() end
+                     end)
+                     
+                     local timeout = 0
+                     while not raceEnded and autoFarmMoneyW2Enabled and timeout < 30 do
+                        task.wait(0.5)
+                        timeout = timeout + 0.5
+                     end
+                     
+                     if eventConn then eventConn:Disconnect() end
+                     
+                     if autoFarmMoneyW2Enabled then
+                        loopCount = loopCount + 1
+                        notify("Auto Farm Money W2", "Lần " .. tostring(loopCount) .. ": Nhận thưởng thành công! Chờ 10s...")
+                        task.wait(10)
+                     end
+                  else
+                     task.wait(1)
+                  end
+               end
+            end)
+         else
+            notify("Auto Farm Money", "Trạng thái: TẮT")
+         end
+      end,
+   })
+end
 
 FarmTab:CreateToggle({
    Name = "Tự động nhận chất béo khi online",
@@ -326,32 +449,35 @@ PetTab:CreateButton({
    end,
 })
 
-PetTab:CreateButton({
-   Name = "Random trứng 1",
-   Callback = function()
-      local args = { "Egg1", 1 }
-      Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
-      notify("Pet", "Đã thực hiện mở Trứng 1!")
-   end,
-})
+-- CHỈ HIỂN THỊ RANDOM TRỨNG 1-3 Ở WORLD 1
+if isWorld1 then
+   PetTab:CreateButton({
+      Name = "Random trứng 1",
+      Callback = function()
+         local args = { "Egg1", 1 }
+         Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
+         notify("Pet", "Đã thực hiện mở Trứng 1!")
+      end,
+   })
 
-PetTab:CreateButton({
-   Name = "Random pet 2",
-   Callback = function()
-      local args = { "Egg2", 1 }
-      Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
-      notify("Pet", "Đã thực hiện mở Trứng 2!")
-   end,
-})
+   PetTab:CreateButton({
+      Name = "Random pet 2",
+      Callback = function()
+         local args = { "Egg2", 1 }
+         Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
+         notify("Pet", "Đã thực hiện mở Trứng 2!")
+      end,
+   })
 
-PetTab:CreateButton({
-   Name = "Random pet 3",
-   Callback = function()
-      local args = { "Egg3", 1 }
-      Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
-      notify("Pet", "Đã thực hiện mở Trứng 3!")
-   end,
-})
+   PetTab:CreateButton({
+      Name = "Random pet 3",
+      Callback = function()
+         local args = { "Egg3", 1 }
+         Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
+         notify("Pet", "Đã thực hiện mở Trứng 3!")
+      end,
+   })
+end
 
 PetTab:CreateButton({
    Name = "Random pet event free",
@@ -367,6 +493,30 @@ PetTab:CreateButton({
 local ShopTab = Window:CreateTab("Mua đồ", 4483362458)
 
 ShopTab:CreateButton({
+   Name = "Về thế giới 1",
+   Callback = function()
+      TryTeleportWorld:FireServer(1)
+      notify("Thế Giới", "Đã chuyển/mở khóa Thế Giới 1")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Mở khóa hoặc tele qua thế giới 2",
+   Callback = function()
+      TryTeleportWorld:FireServer(2)
+      notify("Thế Giới", "Đã chuyển/mở khóa Thế Giới 2")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Mở khóa hoặc tele về thế giới 3",
+   Callback = function()
+      TryTeleportWorld:FireServer(3)
+      notify("Thế Giới", "Đã chuyển/mở khóa Thế Giới 3")
+   end,
+})
+
+ShopTab:CreateButton({
    Name = "Kiểm tra có bao nhiêu tiền",
    Callback = function()
       local moneyRaw = GetMoneyUniversal()
@@ -379,7 +529,6 @@ ShopTab:CreateButton({
    end,
 })
 
--- TÍNH NĂNG MỚI: MUA THỨC ĂN TIẾP THEO
 ShopTab:CreateToggle({
    Name = "Mua thức ăn tiếp theo",
    CurrentValue = false,
@@ -404,7 +553,6 @@ ShopTab:CreateToggle({
                         lastNotifyTime = tick()
                      end
                   else
-                     -- 1. Tìm thức ăn tương ứng với số tiền
                      local targetIndex = nil
                      for i, food in ipairs(foodList) do
                         if money >= food.min and money < food.max then
@@ -413,7 +561,6 @@ ShopTab:CreateToggle({
                         end
                      end
                      
-                     -- 2. Thực hiện thử mua từ món cao nhất có thể về thấp hơn
                      if targetIndex then
                         for i = targetIndex, 1, -1 do
                            if not autoBuyFoodEnabled then break end
@@ -431,7 +578,7 @@ ShopTab:CreateToggle({
                   end
                end
                
-               task.wait(3) -- Kiểm tra lại sau mỗi 3 giây
+               task.wait(3)
             end
          end)
       else
@@ -471,6 +618,35 @@ ShopTab:CreateButton({
 -- TAB THÔNG TIN NGƯỜI CHƠI
 ---------------------------------------------------------
 local PlayerTab = Window:CreateTab("Thông Tin Người Chơi", 4483362458)
+
+PlayerTab:CreateButton({
+   Name = "Bật chế độ Giảm Lag (Anti-Lag)",
+   Callback = function()
+      local workspace = game:GetService("Workspace")
+      local lighting = game:GetService("Lighting")
+      
+      lighting.GlobalShadows = false
+      lighting.FogEnd = 9e9
+      for _, v in ipairs(lighting:GetChildren()) do
+         if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
+            v:Destroy()
+         end
+      end
+      
+      for _, v in ipairs(workspace:GetDescendants()) do
+         if v:IsA("BasePart") and not v:IsA("MeshPart") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.CastShadow = false
+         elseif v:IsA("Decal") or v:IsA("Texture") then
+            v:Destroy()
+         elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+            v.Enabled = false
+         end
+      end
+      
+      notify("Giảm Lag", "Đã tối ưu đồ họa thành công!")
+   end,
+})
 
 PlayerTab:CreateSlider({
    Name = "Tốc độ",
@@ -546,5 +722,5 @@ PlayerTab:CreateToggle({
    end,
 })
 
--- Tự động khôi phục cấu hình đã lưu
+-- Khôi phục cấu hình riêng cho từng World
 Rayfield:LoadConfiguration()
