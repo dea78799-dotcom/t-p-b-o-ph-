@@ -16,7 +16,6 @@ local Window = Rayfield:CreateWindow({
 -- Services & Remote References
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remote = ReplicatedStorage:WaitForChild("Remote")
@@ -27,6 +26,7 @@ local EatEvent = Event:WaitForChild("Eat")
 local PlayerIsEat = EatEvent:WaitForChild("PlayerIsEat")
 local PlayerTryClickRE = EatEvent:WaitForChild("PlayerTryClickRE")
 local PlayerEndRace = Event:WaitForChild("Race"):WaitForChild("PlayerEndRace")
+local TryUnlockFood = Event:WaitForChild("Food"):WaitForChild("TryUnlockFood")
 
 -- Variables
 local autoTrainEnabled = false
@@ -34,13 +34,29 @@ local autoClaimOfflineEnabled = false
 local autoRebirthEnabled = false
 local autoSpinEnabled = false
 local autoCoinEnabled = false
+local autoBuyFoodEnabled = false
 
 local speedEnabled = false
 local jumpEnabled = false
 local speedValue = 16
 local jumpValue = 50
 
--- Hàm hiển thị thông báo
+-- Danh sách thức ăn xếp theo mức giá (Min - Max)
+local foodList = {
+   { name = "Cookies", min = 0, max = 110 },
+   { name = "Bread slices", min = 110, max = 500 },
+   { name = "Gummy bears", min = 500, max = 1500 },
+   { name = "Fries", min = 1500, max = 5800 },
+   { name = "Donut", min = 5800, max = 15000 },
+   { name = "Tucker", min = 15000, max = 40000 },
+   { name = "Hamburger", min = 40000, max = 200000 },
+   { name = "Mexican Chicken Wrap", min = 200000, max = 750000 },
+   { name = "Pizza", min = 750000, max = 3200000 },
+   { name = "Cake", min = 3200000, max = 8800000 },
+   { name = "Steak", min = 8800000, max = 28500000 },
+}
+
+-- Hàm hiển thị thông báo bằng Rayfield
 local function notify(title, content)
    Rayfield:Notify({
       Title = title,
@@ -48,6 +64,92 @@ local function notify(title, content)
       Duration = 3,
       Image = 4483362458,
    })
+end
+
+-- =================================-------------------
+-- HÀM LẤY MONEY TỪ MỌI NGUỒN VÀ CHUYỂN ĐỔI SỐ
+-- =================================-------------------
+local function FindMoneyInValue(obj)
+    if obj:IsA("ValueBase") then
+        local nameLower = string.lower(obj.Name)
+        if (string.find(nameLower, "money") or string.find(nameLower, "coin") or string.find(nameLower, "cash")) and not string.find(nameLower, "win") then
+            return obj.Value
+        end
+    end
+    return nil
+end
+
+local function GetMoneyUniversal()
+    if LocalPlayer then
+        for _, child in ipairs(LocalPlayer:GetDescendants()) do
+            local val = FindMoneyInValue(child)
+            if val ~= nil then return val end
+        end
+    end
+
+    if LocalPlayer and LocalPlayer.Character then
+        for _, child in ipairs(LocalPlayer.Character:GetDescendants()) do
+            local val = FindMoneyInValue(child)
+            if val ~= nil then return val end
+        end
+    end
+
+    if LocalPlayer then
+        for _, child in ipairs(ReplicatedStorage:GetDescendants()) do
+            if child.Name == LocalPlayer.Name or string.find(child.Name, tostring(LocalPlayer.UserId)) then
+                for _, subChild in ipairs(child:GetDescendants()) do
+                    local val = FindMoneyInValue(subChild)
+                    if val ~= nil then return val end
+                end
+            end
+        end
+    end
+
+    local playerGui = LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
+    if playerGui then
+        local candidates = {}
+        for _, obj in ipairs(playerGui:GetDescendants()) do
+            if obj:IsA("TextLabel") and obj.Visible then
+                local txt = obj.Text
+                if not string.find(txt, "/") and not string.find(string.lower(txt), "win") then
+                    if string.match(txt, "%d+%.?%d*[MKBThmkbt]") or string.match(txt, "%$%d+") then
+                        if obj.AbsolutePosition.Y < 120 and obj.AbsolutePosition.X > 300 then
+                            table.insert(candidates, {label = obj, x = obj.AbsolutePosition.X})
+                        end
+                    end
+                end
+            end
+        end
+
+        if #candidates > 0 then
+            table.sort(candidates, function(a, b)
+                return a.x > b.x
+            end)
+            return candidates[1].label.Text
+        end
+    end
+
+    return nil
+end
+
+-- Hàm chuyển đổi định dạng chuỗi Money (ví dụ: "3.2M", "500k", "$1,000") về dạng Số (number)
+local function ParseMoney(val)
+    if type(val) == "number" then return val end
+    if type(val) ~= "string" then return 0 end
+    
+    local cleanStr = string.gsub(val, "[%$,%s]", "")
+    local num, suffix = string.match(cleanStr, "([%d%.]+)(%a?)")
+    num = tonumber(num) or 0
+    
+    if suffix then
+        suffix = string.lower(suffix)
+        if suffix == "k" then num = num * 1e3
+        elseif suffix == "m" then num = num * 1e6
+        elseif suffix == "b" then num = num * 1e9
+        elseif suffix == "t" then num = num * 1e12
+        end
+    end
+    return num
 end
 
 ---------------------------------------------------------
@@ -93,7 +195,7 @@ FarmTab:CreateToggle({
    Callback = function(Value)
       autoCoinEnabled = Value
       if autoCoinEnabled then
-         notify("Auto Cày Xu", "Trạng thái: BẬT")
+         notify("Auto Cày Xu", "Trạng thái: BẬT (Dịch chuyển)")
          
          task.spawn(function()
             local targetCFrame = CFrame.new(0.73, 5004.52, -84.40)
@@ -103,39 +205,16 @@ FarmTab:CreateToggle({
                local hrp = character:WaitForChild("HumanoidRootPart", 5)
                
                if hrp then
-                  -- Tính thời gian bay dựa trên khoảng cách (Tốc độ bay mượt)
-                  local distance = (hrp.Position - targetCFrame.Position).Magnitude
-                  local tweenInfo = TweenInfo.new(distance / 100, Enum.EasingStyle.Linear)
-                  local tween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCFrame})
+                  hrp.CFrame = targetCFrame
                   
-                  tween:Play()
-                  
-                  -- Chờ đến khi bay xong hoặc dừng nếu tắt toggle
-                  local completed = false
-                  local conn
-                  conn = tween.Completed:Connect(function()
-                     completed = true
-                     if conn then conn:Disconnect() end
-                  end)
-                  
-                  while not completed and autoCoinEnabled do
-                     task.wait(0.1)
-                  end
-                  
-                  if not autoCoinEnabled then
-                     tween:Cancel()
-                     break
-                  end
-                  
-                  -- Chờ sự kiện PlayerEndRace kích hoạt từ server
                   local raceEnded = false
                   local eventConn
+                  
                   eventConn = PlayerEndRace.OnClientEvent:Connect(function()
                      raceEnded = true
                      if eventConn then eventConn:Disconnect() end
                   end)
                   
-                  -- Đợi tối đa hoặc chờ tín hiệu từ server
                   local timeout = 0
                   while not raceEnded and autoCoinEnabled and timeout < 30 do
                      task.wait(0.5)
@@ -144,9 +223,8 @@ FarmTab:CreateToggle({
                   
                   if eventConn then eventConn:Disconnect() end
                   
-                  -- Chờ 5 giây trước khi lặp lại vòng mới
                   if autoCoinEnabled then
-                     task.wait(5)
+                     task.wait(10)
                   end
                else
                   task.wait(1)
@@ -266,10 +344,101 @@ PetTab:CreateButton({
    end,
 })
 
+PetTab:CreateButton({
+   Name = "Random pet 3",
+   Callback = function()
+      local args = { "Egg3", 1 }
+      Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
+      notify("Pet", "Đã thực hiện mở Trứng 3!")
+   end,
+})
+
+PetTab:CreateButton({
+   Name = "Random pet event free",
+   Callback = function()
+      Event:WaitForChild("PetEvent"):WaitForChild("TryOpenEventEgg"):FireServer()
+      notify("Pet", "Đã gửi yêu cầu mở Pet Event Free!")
+   end,
+})
+
 ---------------------------------------------------------
 -- TAB MUA ĐỒ
 ---------------------------------------------------------
 local ShopTab = Window:CreateTab("Mua đồ", 4483362458)
+
+ShopTab:CreateButton({
+   Name = "Kiểm tra có bao nhiêu tiền",
+   Callback = function()
+      local moneyRaw = GetMoneyUniversal()
+      if moneyRaw then
+         local moneyNum = ParseMoney(moneyRaw)
+         notify("Số tiền hiện tại", "Bạn đang có: " .. tostring(moneyRaw) .. " (" .. tostring(moneyNum) .. ")")
+      else
+         notify("Số tiền hiện tại", "Không tìm thấy dữ liệu số tiền!")
+      end
+   end,
+})
+
+-- TÍNH NĂNG MỚI: MUA THỨC ĂN TIẾP THEO
+ShopTab:CreateToggle({
+   Name = "Mua thức ăn tiếp theo",
+   CurrentValue = false,
+   Flag = "AutoBuyFoodToggle",
+   Callback = function(Value)
+      autoBuyFoodEnabled = Value
+      if autoBuyFoodEnabled then
+         notify("Auto Thức Ăn", "Trạng thái: BẬT (Tự động kiểm tra & mua)")
+         
+         task.spawn(function()
+            local lastNotifyTime = 0
+            
+            while autoBuyFoodEnabled do
+               local moneyRaw = GetMoneyUniversal()
+               
+               if moneyRaw then
+                  local money = ParseMoney(moneyRaw)
+                  
+                  if money > 28500000 then
+                     if tick() - lastNotifyTime > 15 then
+                        notify("Thông báo", "Chưa được cập nhật hoặc cần qua thế giới 2")
+                        lastNotifyTime = tick()
+                     end
+                  else
+                     -- 1. Tìm thức ăn tương ứng với số tiền
+                     local targetIndex = nil
+                     for i, food in ipairs(foodList) do
+                        if money >= food.min and money < food.max then
+                           targetIndex = i
+                           break
+                        end
+                     end
+                     
+                     -- 2. Thực hiện thử mua từ món cao nhất có thể về thấp hơn
+                     if targetIndex then
+                        for i = targetIndex, 1, -1 do
+                           if not autoBuyFoodEnabled then break end
+                           
+                           local foodToBuy = foodList[i]
+                           TryUnlockFood:FireServer(foodToBuy.name)
+                           task.wait(0.5)
+                        end
+                     end
+                  end
+               else
+                  if tick() - lastNotifyTime > 15 then
+                     notify("Auto Thức Ăn", "Không thể lấy số tiền hiện tại!")
+                     lastNotifyTime = tick()
+                  end
+               end
+               
+               task.wait(3) -- Kiểm tra lại sau mỗi 3 giây
+            end
+         end)
+      else
+         notify("Auto Thức Ăn", "Trạng thái: TẮT")
+      end
+   end,
+})
 
 ShopTab:CreateButton({
    Name = "Mua đường mòn nước",
