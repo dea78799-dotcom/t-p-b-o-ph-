@@ -49,9 +49,13 @@ local TryUnlockFood = Event:WaitForChild("Food"):WaitForChild("TryUnlockFood")
 local TryTeleportWorld = Event:WaitForChild("World"):WaitForChild("TryTeleportWorld")
 local TryUnlockTrail = Event:WaitForChild("Trail"):WaitForChild("TryUnlockTrail")
 local TryUnlockImpact = Event:WaitForChild("Impact"):WaitForChild("TryUnlockImpact")
+local TryClaimAchievement = Event:WaitForChild("Achievement"):WaitForChild("TryClaimAchievement")
 
--- Remote Đua
-local PlayerEndRace = Event:WaitForChild("Race"):WaitForChild("PlayerEndRace")
+-- Remote Đua & Ragdoll
+local RaceEvent = Event:WaitForChild("Race")
+local PlayerEndRace = RaceEvent:WaitForChild("PlayerEndRace")
+local RagdollEvent = RaceEvent:WaitForChild("Ragdoll")
+local UnRagdollEvent = RaceEvent:WaitForChild("UnRagdoll")
 
 -- Variables
 local autoTrainEnabled = false
@@ -270,7 +274,7 @@ FarmTab:CreateToggle({
    end,
 })
 
--- AUTO CÀY XU WORLD 1 (GIỮ NGUYÊN)
+-- AUTO CÀY XU WORLD 1
 if isWorld1 then
    FarmTab:CreateToggle({
       Name = "Auto cày xu",
@@ -673,6 +677,22 @@ ShopTab:CreateButton({
    end,
 })
 
+ShopTab:CreateButton({
+   Name = "Mua hiệu ứng di chuyển lửa",
+   Callback = function()
+      TryUnlockTrail:FireServer("Flame")
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Hiệu ứng di chuyển lửa!")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Hiệu ứng di chuyển xương",
+   Callback = function()
+      TryUnlockTrail:FireServer("Bone")
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Hiệu ứng di chuyển xương!")
+   end,
+})
+
 -- VA CHẠM (IMPACT)
 ShopTab:CreateButton({
    Name = "Mua va chạm lửa",
@@ -707,9 +727,62 @@ ShopTab:CreateButton({
 })
 
 ---------------------------------------------------------
+-- TAB NHẬN HUY HIỆU (NEW)
+---------------------------------------------------------
+local AchievementTab = Window:CreateTab("Nhận huy hiệu", 4483362458)
+
+AchievementTab:CreateButton({
+   Name = "Nhận huy hiệu tái sinh",
+   Callback = function()
+      TryClaimAchievement:FireServer("Rebirth")
+      notify("Huy hiệu", "Đã gửi yêu cầu nhận huy hiệu Tái sinh!")
+   end,
+})
+
+AchievementTab:CreateButton({
+   Name = "Nhận huy hiệu thời gian",
+   Callback = function()
+      TryClaimAchievement:FireServer("Time")
+      notify("Huy hiệu", "Đã gửi yêu cầu nhận huy hiệu Thời gian!")
+   end,
+})
+
+AchievementTab:CreateButton({
+   Name = "Nhận huy hiệu mở trứng",
+   Callback = function()
+      TryClaimAchievement:FireServer("Egg")
+      notify("Huy hiệu", "Đã gửi yêu cầu nhận huy hiệu Mở trứng!")
+   end,
+})
+
+AchievementTab:CreateButton({
+   Name = "Nhận huy hiệu xé băng keo",
+   Callback = function()
+      TryClaimAchievement:FireServer("Tape")
+      notify("Huy hiệu", "Đã gửi yêu cầu nhận huy hiệu Xé băng keo!")
+   end,
+})
+
+---------------------------------------------------------
 -- TAB THÔNG TIN NGƯỜI CHƠI
 ---------------------------------------------------------
 local PlayerTab = Window:CreateTab("Thông Tin Người Chơi", 4483362458)
+
+PlayerTab:CreateButton({
+   Name = "Ragdoll",
+   Callback = function()
+      RagdollEvent:FireServer()
+      notify("Người chơi", "Đã gửi yêu cầu Bật Ragdoll!")
+   end,
+})
+
+PlayerTab:CreateButton({
+   Name = "Tắt ragdoll",
+   Callback = function()
+      UnRagdollEvent:FireServer()
+      notify("Người chơi", "Đã gửi yêu cầu Tắt Ragdoll!")
+   end,
+})
 
 PlayerTab:CreateButton({
    Name = "Bật chế độ Giảm Lag (Anti-Lag)",
