@@ -50,6 +50,8 @@ local TryTeleportWorld = Event:WaitForChild("World"):WaitForChild("TryTeleportWo
 local TryUnlockTrail = Event:WaitForChild("Trail"):WaitForChild("TryUnlockTrail")
 local TryUnlockImpact = Event:WaitForChild("Impact"):WaitForChild("TryUnlockImpact")
 local TryClaimAchievement = Event:WaitForChild("Achievement"):WaitForChild("TryClaimAchievement")
+local TryGetReward = Event:WaitForChild("Reward"):WaitForChild("[C-S]TryGetReward")
+local TryClaimDailyPackReward = Event:WaitForChild("DailyPack"):WaitForChild("TryClaimDailyPackReward")
 
 -- Remote Đua & Ragdoll
 local RaceEvent = Event:WaitForChild("Race")
@@ -60,6 +62,8 @@ local UnRagdollEvent = RaceEvent:WaitForChild("UnRagdoll")
 -- Variables
 local autoTrainEnabled = false
 local autoClaimOfflineEnabled = false
+local autoClaimOnlineEnabled = false
+local autoClaimDailyEnabled = false
 local autoRebirthEnabled = false
 local autoSpinEnabled = false
 local autoCoinEnabled = false
@@ -70,6 +74,7 @@ local speedEnabled = false
 local jumpEnabled = false
 local speedValue = 16
 local jumpValue = 50
+local reportText = ""
 
 -- HOOK METAMETHOD ĐỂ BẮT ĐÚNG LÚC GAME CHẠY PlayerEndRace:FireServer()
 local raceFiredByGame = false
@@ -98,6 +103,13 @@ local foodList = {
    { name = "Pizza", min = 750000, max = 3200000 },
    { name = "Cake", min = 3200000, max = 8800000 },
    { name = "Steak", min = 8800000, max = 28500000 },
+   { name = "Cream puffs", min = 28500000, max = 345000000 },
+   { name = "Pudding", min = 345000000, max = 765000000 },
+   { name = "Candied hawthorn", min = 765000000, max = 1350000000 },
+   { name = "Pan-fried dumplings", min = 1350000000, max = 3780000000 },
+   { name = "Sushi rolls", min = 3780000000, max = 10600000000 },
+   { name = "Grilled skewers", min = 10600000000, max = 31200000000 },
+   { name = "Fish strips", min = 31200000000, max = 102000000000 },
 }
 
 -- Hàm hiển thị thông báo bằng Rayfield
@@ -394,6 +406,56 @@ FarmTab:CreateToggle({
    end,
 })
 
+-- TỰ ĐỘNG NHẬN QUÀ TRỰC TUYẾN (1 ĐẾN 20)
+FarmTab:CreateToggle({
+   Name = "Nhận quà trực tuyến",
+   CurrentValue = false,
+   Flag = "AutoClaimOnlineToggle",
+   Callback = function(Value)
+      autoClaimOnlineEnabled = Value
+      if autoClaimOnlineEnabled then
+         notify("Quà trực tuyến", "Trạng thái: BẬT (Tự động nhận 1-20)")
+         task.spawn(function()
+            while autoClaimOnlineEnabled do
+               for i = 1, 20 do
+                  if not autoClaimOnlineEnabled then break end
+                  TryGetReward:FireServer(tostring(i))
+                  task.wait(1)
+               end
+               task.wait(5)
+            end
+         end)
+      else
+         notify("Quà trực tuyến", "Trạng thái: TẮT")
+      end
+   end,
+})
+
+-- TỰ ĐỘNG NHẬN QUÀ HÀNG NGÀY
+FarmTab:CreateToggle({
+   Name = "Nhận quà hàng ngày",
+   CurrentValue = false,
+   Flag = "AutoClaimDailyToggle",
+   Callback = function(Value)
+      autoClaimDailyEnabled = Value
+      if autoClaimDailyEnabled then
+         notify("Quà hàng ngày", "Trạng thái: BẬT (Tự động nhận quà hàng ngày)")
+         task.spawn(function()
+            while autoClaimDailyEnabled do
+               for i = 1, 10 do
+                  if not autoClaimDailyEnabled then break end
+                  TryClaimDailyPackReward:FireServer(i)
+                  task.wait(0.1)
+               end
+               task.wait(5)
+            end
+         end)
+      else
+         notify("Quà hàng ngày", "Trạng thái: TẮT")
+      end
+   end,
+})
+
 FarmTab:CreateToggle({
    Name = "Tự động tái sinh",
    CurrentValue = false,
@@ -580,9 +642,9 @@ ShopTab:CreateToggle({
                if moneyRaw then
                   local money = ParseMoney(moneyRaw)
                   
-                  if money > 28500000 then
+                  if money > 102000000000 then
                      if tick() - lastNotifyTime > 15 then
-                        notify("Thông báo", "Chưa được cập nhật hoặc cần qua thế giới 2")
+                        notify("Thông báo", "Chưa được cập nhật hoặc cần qua thế giới mới")
                         lastNotifyTime = tick()
                      end
                   else
@@ -727,7 +789,7 @@ ShopTab:CreateButton({
 })
 
 ---------------------------------------------------------
--- TAB NHẬN HUY HIỆU (NEW)
+-- TAB NHẬN HUY HIỆU
 ---------------------------------------------------------
 local AchievementTab = Window:CreateTab("Nhận huy hiệu", 4483362458)
 
@@ -883,6 +945,63 @@ PlayerTab:CreateToggle({
          end)
       else
          notify("Nhảy cao", "Đã TẮT độ cao nhảy (Trở về mặc định)")
+      end
+   end,
+})
+
+-- SECTION BÁO LỖI / GÓP Ý
+PlayerTab:CreateInput({
+   Name = "Nội dung báo lỗi / Góp ý",
+   PlaceholderText = "Nhập nội dung lỗi hoặc tin nhắn góp ý...",
+   RemoveTextAfterFocusLost = false,
+   Callback = function(Text)
+      reportText = Text
+   end,
+})
+
+PlayerTab:CreateButton({
+   Name = "Gửi báo lỗi về Discord",
+   Callback = function()
+      if reportText == "" or string.gsub(reportText, "%s+", "") == "" then
+         notify("Báo Lỗi", "Vui lòng nhập nội dung trước khi gửi!")
+         return
+      end
+      
+      local webhookUrl = "https://discord.com/api/webhooks/1545333668187344957/jWX4F4hfLlZJ6-7uslrSamudPk_FsOQQf6QHcxJGFSbZxlsFZcSFgM5EVdJgSxI8niwy"
+      local reqFunc = (syn and syn.request) or (http and http.request) or http_request or request
+      
+      if reqFunc then
+         local payload = HttpService:JSONEncode({
+            content = "🔔 **Có báo lỗi / góp ý mới!**",
+            embeds = {{
+               title = "📋 Báo Lỗi / Góp Ý Từ Người Chơi",
+               description = reportText,
+               color = 16711680, -- Màu đỏ
+               fields = {
+                  { name = "Tên người chơi", value = LocalPlayer.Name .. " (@" .. LocalPlayer.DisplayName .. ")", inline = true },
+                  { name = "User ID", value = tostring(LocalPlayer.UserId), inline = true },
+                  { name = "Game ID", value = tostring(game.PlaceId), inline = true }
+               },
+               footer = { text = "Tập Béo Phì Hub" }
+            }}
+         })
+         
+         local success, err = pcall(function()
+            reqFunc({
+               Url = webhookUrl,
+               Method = "POST",
+               Headers = { ["Content-Type"] = "application/json" },
+               Body = payload
+            })
+         end)
+         
+         if success then
+            notify("Báo Lỗi", "Đã gửi thành công về Discord!")
+         else
+            notify("Báo Lỗi", "Gửi thất bại! Lỗi: " .. tostring(err))
+         end
+      else
+         notify("Báo Lỗi", "Executor không hỗ trợ hàm gửi Webhook!")
       end
    end,
 })
