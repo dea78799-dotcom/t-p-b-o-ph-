@@ -24,7 +24,7 @@ local Window = Rayfield:CreateWindow({
    LoadingSubtitle = "Tập Béo Phì Hub",
    ConfigurationSaving = {
       Enabled = true,
-      FolderName = "🤖AI HACK🤖",
+      FolderName = "TapBeoPhiHub",
       FileName = "Settings_" .. tostring(currentPlaceId)
    },
    Discord = { Enabled = false },
@@ -47,8 +47,10 @@ local PlayerIsEat = EatEvent:WaitForChild("PlayerIsEat")
 local PlayerTryClickRE = EatEvent:WaitForChild("PlayerTryClickRE")
 local TryUnlockFood = Event:WaitForChild("Food"):WaitForChild("TryUnlockFood")
 local TryTeleportWorld = Event:WaitForChild("World"):WaitForChild("TryTeleportWorld")
+local TryUnlockTrail = Event:WaitForChild("Trail"):WaitForChild("TryUnlockTrail")
+local TryUnlockImpact = Event:WaitForChild("Impact"):WaitForChild("TryUnlockImpact")
 
--- Remote nhận diện hoàn thành đua cho cả 2 World
+-- Remote Đua
 local PlayerEndRace = Event:WaitForChild("Race"):WaitForChild("PlayerEndRace")
 
 -- Variables
@@ -64,6 +66,20 @@ local speedEnabled = false
 local jumpEnabled = false
 local speedValue = 16
 local jumpValue = 50
+
+-- HOOK METAMETHOD ĐỂ BẮT ĐÚNG LÚC GAME CHẠY PlayerEndRace:FireServer()
+local raceFiredByGame = false
+
+if hookmetamethod then
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if not checkcaller() and self == PlayerEndRace and (method == "FireServer" or method == "fireServer") then
+            raceFiredByGame = true
+        end
+        return oldNamecall(self, ...)
+    end))
+end
 
 -- Danh sách thức ăn xếp theo mức giá (Min - Max)
 local foodList = {
@@ -230,6 +246,7 @@ FarmTab:CreateButton({
    end,
 })
 
+-- TỰ ĐỘNG TẬP (35 LẦN / GIÂY)
 FarmTab:CreateToggle({
    Name = "Tự động tập",
    CurrentValue = false,
@@ -237,14 +254,14 @@ FarmTab:CreateToggle({
    Callback = function(Value)
       autoTrainEnabled = Value
       if autoTrainEnabled then
-         notify("Tự động tập", "Trạng thái: BẬT (20 lần/giây)")
+         notify("Tự động tập", "Trạng thái: BẬT (35 lần/giây)")
          PlayerIsEat:FireServer()
          
          task.spawn(function()
             while autoTrainEnabled do
                local args = { true }
                PlayerTryClickRE:FireServer(unpack(args))
-               task.wait(1 / 20)
+               task.wait(1 / 35)
             end
          end)
       else
@@ -253,7 +270,7 @@ FarmTab:CreateToggle({
    end,
 })
 
--- AUTO CÀY XU WORLD 1 (75568173037446)
+-- AUTO CÀY XU WORLD 1 (GIỮ NGUYÊN)
 if isWorld1 then
    FarmTab:CreateToggle({
       Name = "Auto cày xu",
@@ -291,7 +308,6 @@ if isWorld1 then
                      if eventConn then eventConn:Disconnect() end
                      
                      if autoCoinEnabled then
-                        notify("Auto Cày Xu", "Đã hoàn thành! Đang chờ 10s lặp lại...")
                         task.wait(10)
                      end
                   else
@@ -305,7 +321,7 @@ if isWorld1 then
       end,
    })
 else
-   -- AUTO FARM MONEY WORLD 2 (79162127792867)
+   -- AUTO FARM MONEY WORLD 2
    FarmTab:CreateToggle({
       Name = "Auto farm money",
       CurrentValue = false,
@@ -313,7 +329,7 @@ else
       Callback = function(Value)
          autoFarmMoneyW2Enabled = Value
          if autoFarmMoneyW2Enabled then
-            notify("Auto Farm Money", "Trạng thái: BẬT (Dịch chuyển W2)")
+            notify("Auto Farm Money", "Trạng thái: BẬT (World 2 - Nghỉ 8s)")
             
             task.spawn(function()
                local targetCFrame = CFrame.new(-4999.87, 8356.70, -179.45)
@@ -321,32 +337,26 @@ else
                
                while autoFarmMoneyW2Enabled do
                   local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-                  local hrp = character:WaitForChild("HumanoidRootPart", 5)
+                  local hrp = character:FindFirstChild("HumanoidRootPart")
                   
                   if hrp then
-                     -- Dịch chuyển tức thì đến tọa độ W2
+                     raceFiredByGame = false
+                     
+                     -- 1. Dịch chuyển nhân vật tới vị trí
                      hrp.CFrame = targetCFrame
                      
-                     local raceEnded = false
-                     local eventConn
-                     
-                     eventConn = PlayerEndRace.OnClientEvent:Connect(function()
-                        raceEnded = true
-                        if eventConn then eventConn:Disconnect() end
-                     end)
-                     
+                     -- 2. Đợi game tự động thực thi code PlayerEndRace:FireServer()
                      local timeout = 0
-                     while not raceEnded and autoFarmMoneyW2Enabled and timeout < 30 do
-                        task.wait(0.5)
-                        timeout = timeout + 0.5
+                     while not raceFiredByGame and timeout < 15 and autoFarmMoneyW2Enabled do
+                        task.wait(0.1)
+                        timeout = timeout + 0.1
                      end
                      
-                     if eventConn then eventConn:Disconnect() end
-                     
+                     -- 3. Phát hiện game đã gọi lệnh -> Thông báo & Nghỉ đúng 8s
                      if autoFarmMoneyW2Enabled then
                         loopCount = loopCount + 1
-                        notify("Auto Farm Money W2", "Lần " .. tostring(loopCount) .. ": Nhận thưởng thành công! Chờ 10s...")
-                        task.wait(10)
+                        notify("Auto Farm Money W2", "Lần " .. tostring(loopCount) .. ": Game đã tự gửi xong! Chờ 8s...")
+                        task.wait(8)
                      end
                   else
                      task.wait(1)
@@ -449,8 +459,8 @@ PetTab:CreateButton({
    end,
 })
 
--- CHỈ HIỂN THỊ RANDOM TRỨNG 1-3 Ở WORLD 1
 if isWorld1 then
+   -- TRỨNG WORLD 1
    PetTab:CreateButton({
       Name = "Random trứng 1",
       Callback = function()
@@ -475,6 +485,25 @@ if isWorld1 then
          local args = { "Egg3", 1 }
          Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
          notify("Pet", "Đã thực hiện mở Trứng 3!")
+      end,
+   })
+else
+   -- TRỨNG WORLD 2
+   PetTab:CreateButton({
+      Name = "Random pet 1 (Thế giới 2)",
+      Callback = function()
+         local args = { "Egg1", 1 }
+         Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
+         notify("Pet", "Đã gửi yêu cầu mở Pet 1 Thế giới 2!")
+      end,
+   })
+
+   PetTab:CreateButton({
+      Name = "Random pet 2 (Thế giới 2)",
+      Callback = function()
+         local args = { "Egg2", 1 }
+         Function:WaitForChild("Luck"):WaitForChild("[C-S]DoLuck"):InvokeServer(unpack(args))
+         notify("Pet", "Đã gửi yêu cầu mở Pet 2 Thế giới 2!")
       end,
    })
 end
@@ -587,11 +616,11 @@ ShopTab:CreateToggle({
    end,
 })
 
+-- HIỆU ỨNG DI CHUYỂN (TRAIL)
 ShopTab:CreateButton({
    Name = "Mua đường mòn nước",
    Callback = function()
-      local args = { "Blister" }
-      Event:WaitForChild("Trail"):WaitForChild("TryUnlockTrail"):FireServer(unpack(args))
+      TryUnlockTrail:FireServer("Blister")
       notify("Cửa hàng", "Đã gửi yêu cầu mua Đường mòn nước!")
    end,
 })
@@ -599,8 +628,7 @@ ShopTab:CreateButton({
 ShopTab:CreateButton({
    Name = "Mua đường mòn sấm sét",
    Callback = function()
-      local args = { "Lightning" }
-      Event:WaitForChild("Trail"):WaitForChild("TryUnlockTrail"):FireServer(unpack(args))
+      TryUnlockTrail:FireServer("Lightning")
       notify("Cửa hàng", "Đã gửi yêu cầu mua Đường mòn sấm sét!")
    end,
 })
@@ -608,9 +636,73 @@ ShopTab:CreateButton({
 ShopTab:CreateButton({
    Name = "Mua đường mòn nhạc",
    Callback = function()
-      local args = { "Music" }
-      Event:WaitForChild("Trail"):WaitForChild("TryUnlockTrail"):FireServer(unpack(args))
+      TryUnlockTrail:FireServer("Music")
       notify("Cửa hàng", "Đã gửi yêu cầu mua Đường mòn nhạc!")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Mua hiệu ứng di chuyển ong",
+   Callback = function()
+      TryUnlockTrail:FireServer("Bee")
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Hiệu ứng di chuyển ong!")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Hiệu ứng di chuyển hacker",
+   Callback = function()
+      TryUnlockTrail:FireServer("Hacker")
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Hiệu ứng di chuyển Hacker!")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Hiệu ứng di chuyển lá phong",
+   Callback = function()
+      TryUnlockTrail:FireServer("Maple leaves")
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Hiệu ứng di chuyển lá phong!")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Hiệu ứng di chuyển băng",
+   Callback = function()
+      TryUnlockTrail:FireServer("Frost")
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Hiệu ứng di chuyển băng!")
+   end,
+})
+
+-- VA CHẠM (IMPACT)
+ShopTab:CreateButton({
+   Name = "Mua va chạm lửa",
+   Callback = function()
+      TryUnlockImpact:FireServer("Flame")
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Va chạm lửa!")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Va chạm bụi",
+   Callback = function()
+      TryUnlockImpact:FireServer("Dust")
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Va chạm bụi!")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Va chạm nước",
+   Callback = function()
+      TryUnlockImpact:FireServer("Water splash")
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Va chạm nước!")
+   end,
+})
+
+ShopTab:CreateButton({
+   Name = "Va chạm bóng ma",
+   Callback = function()
+      TryUnlockImpact:FireServer("Ghosts")
+      notify("Cửa hàng", "Đã gửi yêu cầu mua Va chạm bóng ma!")
    end,
 })
 
